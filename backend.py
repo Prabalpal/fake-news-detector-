@@ -6,7 +6,7 @@ import re
 app = Flask(__name__)
 CORS(app)
 
-genai.configure(api_key="AIzaSyAWvAUdEu7xzd6I1TakpF4ODJGIUnNuaDc")
+genai.configure(api_key="key_here")
 
 model = genai.GenerativeModel("gemini-2.5-flash")
 
@@ -63,3 +63,4 @@ def analyze():
 
 if __name__ == "__main__":
     app.run(port=5000)
+
