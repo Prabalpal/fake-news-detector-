@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Fake News Detector – Gemini (Frontend)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  body { font-family: "Inter", Arial, sans-serif; background:#eef1f7; padding:28px; }
+  h1 { text-align:center; font-weight:700; color:#222; margin-bottom:20px; }
+  .container { max-width:900px; margin:0 auto; }
+
+  textarea {
+    width:100%; height:160px; padding:16px; border-radius:12px;
+    border:1px solid #d6dce6; background:#fff; box-shadow:0 6px 20px rgba(9,30,66,0.03);
+    font-size:15px; resize:vertical;
+  }
+
+  .actions { display:flex; gap:12px; align-items:center; margin-top:14px; }
+  button {
+    background:#005cff; color:white; border:none; padding:12px 18px; border-radius:10px;
+    cursor:pointer; font-weight:600; box-shadow:0 8px 20px rgba(3,102,214,0.12);
+  }
+  button:active{ transform:translateY(1px); }
+
+  .result-card {
+    background:#fff; padding:22px; border-radius:16px; margin-top:28px;
+    box-shadow:0 12px 36px rgba(18,38,63,0.08); animation:fadeIn .45s ease;
+  }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(8px)} to{opacity:1;transform:none} }
+
+  .result-header {
+    display:flex; justify-content:space-between; align-items:center;
+    background:linear-gradient(135deg,#4e8df5,#6aa6ff); padding:12px 16px; border-radius:10px; color:#fff;
+  }
+  .result-header h2{ margin:0; font-size:1.15rem; font-weight:600; display:flex; align-items:center; gap:10px; }
+
+  .badge { padding:7px 12px; border-radius:12px; font-weight:700; font-size:0.9rem; }
+  .badge.fake{ background:#ff4d4d; color:#fff }
+  .badge.real{ background:#35c759; color:#fff }
+  .badge.uncertain{ background:#ffcc00; color:#000 }
+
+  .result-body{ margin-top:14px; }
+  .result-item span{ font-weight:700; color:#222; display:block; margin-bottom:8px; }
+  .result-item p{
+    margin:0 0 16px 0; padding:12px; border-radius:10px; background:#f3f6fb; line-height:1.45;
+  }
+
+  .small { font-size:13px; color:#52607a; margin-left:6px; }
+  .hidden { display:none; }
+
+  /* responsive */
+  @media (max-width:520px){
+    .actions{ flex-direction:column; align-items:stretch; }
+    button{ width:100%;}
+  }
+</style>
+</head>
+<body>
+  <div class="container">
+    <h1>Fake News Detector 🔎🤖</h1>
+
+    <textarea id="userInput" placeholder="Paste the headline or short news text here..."></textarea>
+
+    <div class="actions">
+      <button id="checkBtn">Check Authenticity</button>
+      <div class="small">Tip: keep input under ~400 words for faster results.</div>
+    </div>
+
+    <!-- Result Card -->
+    <div id="resultCard" class="result-card hidden" role="region" aria-live="polite">
+      <div class="result-header">
+        <h2><span id="emojiIcon">😐</span> Authenticity Report</h2>
+        <span id="resultBadge" class="badge">Neutral</span>
+      </div>
+
+      <div class="result-body">
+        <div class="result-item">
+          <span>Classification</span>
+          <p id="res-class">—</p>
+        </div>
+
+        <div class="result-item">
+          <span>Confidence Score</span>
+          <p id="res-score">—</p>
+        </div>
+
+        <div class="result-item">
+          <span>Explanation</span>
+          <p id="res-explanation">—</p>
+        </div>
+
+        <div class="result-item">
+          <span>Fact-Check Information</span>
+          <p id="res-fact">—</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+<script>
+document.getElementById("checkBtn").addEventListener("click", checkFakeNews);
+
+async function checkFakeNews(){
+  const txt = document.getElementById("userInput").value.trim();
+  if(!txt) return alert("Please enter some text to check.");
+
+  // show temporary loading card
+  showLoading();
+
+  try {
+    // <-- Explicit backend URL (use this if backend is running on localhost:5000) -->
+    const res = await fetch("http://localhost:5000/analyze", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ text: txt })
+    });
+
+    if(!res.ok){
+      const errText = await res.text();
+      throw new Error(`Backend error: ${res.status} ${errText}`);
+    }
+
+    const payload = await res.json();
+
+    // Expecting backend to return a JSON object with keys:
+    // { classification: "...", confidence: "...", explanation: "...", factCheck: "..." }
+    // If your backend returns a different structure, adapt these lines accordingly.
+    const data = {
+      classification: payload.classification || payload.prediction || "Unknown",
+      confidence: payload.confidence || payload.score || "N/A",
+      explanation: payload.explanation || payload.reason || (payload.raw_model_output || "").slice(0, 600) || "No explanation.",
+      factCheck: payload.factCheck || payload.evidence_urls?.join(", ") || payload.evidence || "No sources provided."
+    };
+
+    renderResult(data);
+  } catch (err) {
+    // show error inside card
+    renderResult({
+      classification: "Error",
+      confidence: "0",
+      explanation: "An error occurred while contacting the backend. " + (err.message || ""),
+      factCheck: ""
+    });
+    console.error(err);
+  }
+}
+
+function showLoading(){
+  document.getElementById("res-class").innerText = "Analyzing…";
+  document.getElementById("res-score").innerText = "—";
+  document.getElementById("res-explanation").innerText = "Calling backend and model — this may take a few seconds.";
+  document.getElementById("res-fact").innerText = "—";
+  document.getElementById("emojiIcon").innerText = "⏳";
+  document.getElementById("resultBadge").className = "badge uncertain";
+  document.getElementById("resultBadge").innerText = "Checking…";
+  document.getElementById("resultCard").classList.remove("hidden");
+}
+
+function renderResult(data){
+  // fill text
+  document.getElementById("res-class").innerText = data.classification;
+  document.getElementById("res-score").innerText = (typeof data.confidence === "number") ? `${data.confidence}%` : data.confidence;
+  document.getElementById("res-explanation").innerText = data.explanation;
+  document.getElementById("res-fact").innerText = data.factCheck;
+
+  // decide badge & emoji
+  const badge = document.getElementById("resultBadge");
+  const emoji = document.getElementById("emojiIcon");
+  const c = (data.classification || "").toString().toLowerCase();
+
+  if(c.includes("fake") || c.includes("false") || c.includes("misleading") || c.includes("fabricated")){
+    badge.innerText = "Fake / Misleading";
+    badge.className = "badge fake";
+    emoji.innerText = "❌🚫";
+  } else if(c.includes("real") || c.includes("true") || c.includes("authentic") || c.includes("verified")){
+    badge.innerText = "True / Authentic";
+    badge.className = "badge real";
+    emoji.innerText = "✅🟢";
+  } else if(c.includes("error")){
+    badge.innerText = "Error";
+    badge.className = "badge uncertain";
+    emoji.innerText = "⚠️";
+  } else {
+    badge.innerText = "Uncertain";
+    badge.className = "badge uncertain";
+    emoji.innerText = "🤔💭";
+  }
+
+  // scroll into view nicely
+  document.getElementById("resultCard").scrollIntoView({ behavior: "smooth", block: "center" });
+}
+</script>
+</body>
+</html>
